@@ -93,7 +93,6 @@ Relancer le workflow ne cree pas de doublons et redeploie proprement.
 
 Dans GitHub: `Settings > Secrets and variables > Actions > New repository secret`
 
-- `DOCKERHUB_USERNAME` -> `linuxmint75`
 - `DOCKERHUB_TOKEN` -> token Docker Hub (a creer)
 - `DOCKER_IMAGE_NAME` -> exemple `projet_deploiement_3`
 - `AZURE_VM_HOST` -> IP publique ou DNS de la VM
@@ -104,6 +103,8 @@ Dans GitHub: `Settings > Secrets and variables > Actions > New repository secret
 - `HEALTHCHECK_URL` -> exemple `http://<ip-vm>/health`
 
 Aucun identifiant n'est stocke en clair dans le depot: tout passe par GitHub Secrets.
+
+Note: le username Docker Hub est fixe dans le workflow a `linuxmint75`.
 
 ## Tags Docker utilises
 
