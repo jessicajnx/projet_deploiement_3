@@ -89,31 +89,9 @@ Strategie:
 
 Relancer le workflow ne cree pas de doublons et redeploie proprement.
 
-## Secrets GitHub obligatoires
-
-Dans GitHub: `Settings > Secrets and variables > Actions > New repository secret`
-
-- `DOCKERHUB_USERNAME` -> `linuxmint75`
-- `DOCKERHUB_TOKEN` -> token Docker Hub (a creer)
-- `DOCKER_IMAGE_NAME` -> exemple `projet_deploiement_3`
-- `AZURE_VM_HOST` -> IP publique ou DNS de la VM
-- `AZURE_VM_USER` -> utilisateur SSH de la VM (ex: `azureuser`)
-- `AZURE_VM_SSH_KEY` -> cle privee SSH (nouvelle cle recommandee)
-- `HOST_PORT` -> port public de la VM (ex: `80`)
-- `CONTAINER_PORT` -> port interne app (ici `3000`)
-- `HEALTHCHECK_URL` -> exemple `http://<ip-vm>/health`
-
-Aucun identifiant n'est stocke en clair dans le depot: tout passe par GitHub Secrets.
 
 ## Tags Docker utilises
 
 - `${GITHUB_SHA}`
 - `${GITHUB_REF_NAME}` (ex: `main`)
 - `latest`
-
-## Preuve demandee (capture)
-
-Ajoute une capture d'ecran montrant l'application accessible via l'IP publique Azure, par exemple:
-
-- `http://<IP_PUBLIQUE_VM>/health`
-
