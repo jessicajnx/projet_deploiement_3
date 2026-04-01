@@ -96,16 +96,24 @@ jobs:
           script_stop: true
           script: |
             set -e
-            docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}"
-            docker pull "${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
-            docker rm -f "${{ env.CONTAINER_NAME }}" || true
-            docker run -d \
+            DOCKER_CMD="docker"
+            if ! docker info >/dev/null 2>&1; then
+              DOCKER_CMD="sudo docker"
+            fi
+            echo "${{ secrets.DOCKERHUB_TOKEN }}" | $DOCKER_CMD login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            $DOCKER_CMD pull "${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+            $DOCKER_CMD rm -f "${{ env.CONTAINER_NAME }}" || true
+            $DOCKER_CMD run -d \
               --name "${{ env.CONTAINER_NAME }}" \
               --restart unless-stopped \
               -p "${{ secrets.HOST_PORT }}:${{ secrets.CONTAINER_PORT }}" \
               "${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
             for i in $(seq 1 10); do
-              if curl -fsS "http://localhost:${{ secrets.HOST_PORT }}/health" >/dev/null; then
+              if command -v curl >/dev/null 2>&1 && curl -fsS "http://localhost:${{ secrets.HOST_PORT }}/health" >/dev/null; then
+                echo "VM local healthcheck passed"
+                exit 0
+              fi
+              if command -v wget >/dev/null 2>&1 && wget -qO- "http://localhost:${{ secrets.HOST_PORT }}/health" >/dev/null; then
                 echo "VM local healthcheck passed"
                 exit 0
               fi
