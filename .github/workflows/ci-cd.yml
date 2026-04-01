@@ -96,6 +96,34 @@ jobs:
           script_stop: true
           script: |
             set -e
+            SUDO=""
+            if [ "$(id -u)" -ne 0 ]; then
+              SUDO="sudo"
+            fi
+
+            if ! command -v docker >/dev/null 2>&1; then
+              if command -v apt-get >/dev/null 2>&1; then
+                $SUDO apt-get update -y
+                $SUDO apt-get install -y docker.io
+              elif command -v yum >/dev/null 2>&1; then
+                $SUDO yum install -y docker
+              else
+                echo "No supported package manager found to install Docker"
+                exit 1
+              fi
+            fi
+
+            $SUDO systemctl enable docker || true
+            $SUDO systemctl start docker || true
+
+            if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+              if command -v apt-get >/dev/null 2>&1; then
+                $SUDO apt-get install -y curl
+              elif command -v yum >/dev/null 2>&1; then
+                $SUDO yum install -y curl
+              fi
+            fi
+
             DOCKER_CMD="docker"
             if ! docker info >/dev/null 2>&1; then
               DOCKER_CMD="sudo docker"
