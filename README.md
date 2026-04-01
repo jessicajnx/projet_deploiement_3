@@ -1,35 +1,119 @@
 # projet_deploiement_3
 
-Pipeline CI/CD GitHub Actions deja configuree avec l'ordre suivant:
+Application API Node.js/Express avec pipeline CI/CD complete:
 
 1. Unit tests
 2. E2E tests
-3. Build Docker image
-4. Push image Docker Hub
-5. Deploy sur Azure VM en SSH
-6. Verification par requete HTTP healthcheck
+3. Build + Push Docker Hub
+4. Deploy Azure VM (SSH) + verification HTTP
 
-## Fichier workflow
+## Application
 
-Le workflow est dans `.github/workflows/ci-cd.yml` et se lance sur chaque push vers `main`.
+- Port local et conteneur: `3000`
+- Endpoint de verification: `GET /health`
+- Endpoint fonctionnel supplementaire: `GET /api/greet?name=Jess`
 
-## Secrets GitHub a ajouter
+Reponses attendues:
+
+- `GET /health` -> `200` + JSON `{ status: "ok", ... }`
+- `GET /api/greet?name=Jess` -> `200` + JSON `{ message: "Bonjour Jess" }`
+
+## Lancement local
+
+```bash
+npm ci
+npm start
+```
+
+Verification:
+
+```bash
+curl http://localhost:3000/health
+curl "http://localhost:3000/api/greet?name=Jess"
+```
+
+## Tests
+
+Commandes CI (une commande par type):
+
+- Unit tests: `npm run test:unit`
+- E2E tests: `npm run test:e2e`
+
+Les tests E2E verifient:
+
+- disponibilite de l'application (`/health`)
+- fonctionnalite supplementaire (`/api/greet`)
+
+## Docker
+
+Build et run local:
+
+```bash
+docker build -t projet_deploiement_3:local .
+docker run --rm -p 3000:3000 projet_deploiement_3:local
+```
+
+Le `Dockerfile`:
+
+- utilise `node:20-alpine`
+- expose le port `3000`
+- lance l'app avec `npm start`
+
+## Pipeline GitHub Actions
+
+Workflow: `.github/workflows/ci-cd.yml`
+
+Declenchement:
+
+- push sur `main`
+- execution manuelle (`workflow_dispatch`)
+
+Ordre des jobs:
+
+1. `unit-tests`
+2. `e2e-tests`
+3. `docker-build-push` (uniquement si 1 et 2 OK)
+4. `deploy-azure-vm` (deploiement idempotent + verification)
+
+## Deploiement idempotent
+
+Le deploiement SSH utilise un nom de conteneur fixe: `myapp`.
+
+Strategie:
+
+- pull de l'image cible
+- suppression de l'ancien conteneur `myapp` s'il existe
+- redemarrage d'un seul conteneur `myapp`
+- verification locale VM sur `/health`
+- verification publique depuis GitHub Actions via `HEALTHCHECK_URL`
+
+Relancer le workflow ne cree pas de doublons et redeploie proprement.
+
+## Secrets GitHub obligatoires
 
 Dans GitHub: `Settings > Secrets and variables > Actions > New repository secret`
 
-- `DOCKERHUB_USERNAME`
-- `DOCKERHUB_TOKEN`
-- `DOCKER_IMAGE_NAME` (ex: `projet_deploiement_3`)
-- `AZURE_VM_HOST` (IP ou DNS de la VM)
-- `AZURE_VM_USER` (ex: `azureuser`)
-- `AZURE_VM_SSH_KEY` (cle privee SSH complete)
-- `CONTAINER_NAME` (ex: `projet_deploiement_3_app`)
-- `HOST_PORT` (ex: `80`)
-- `CONTAINER_PORT` (ex: `3000`)
-- `HEALTHCHECK_URL` (ex: `http://<ip-vm>/health`)
+- `DOCKERHUB_USERNAME` -> `linuxmint75`
+- `DOCKERHUB_TOKEN` -> token Docker Hub (a creer)
+- `DOCKER_IMAGE_NAME` -> exemple `projet_deploiement_3`
+- `AZURE_VM_HOST` -> IP publique ou DNS de la VM
+- `AZURE_VM_USER` -> utilisateur SSH de la VM (ex: `azureuser`)
+- `AZURE_VM_SSH_KEY` -> cle privee SSH (nouvelle cle recommandee)
+- `HOST_PORT` -> port public de la VM (ex: `80`)
+- `CONTAINER_PORT` -> port interne app (ici `3000`)
+- `HEALTHCHECK_URL` -> exemple `http://<ip-vm>/health`
 
-## Notes importantes
+Aucun identifiant n'est stocke en clair dans le depot: tout passe par GitHub Secrets.
 
-- Le job Docker echoue volontairement si `Dockerfile` est absent a la racine.
-- Les jobs E2E et Unit attendent un projet Node (`package.json`) ou Python (`requirements.txt` ou `pyproject.toml`).
-- Pense a adapter les commandes de tests (`npm run test:unit`, `npm run test:e2e`, `pytest`) selon ton projet reel.
+## Tags Docker utilises
+
+- `${GITHUB_SHA}`
+- `${GITHUB_REF_NAME}` (ex: `main`)
+- `latest`
+
+## Preuve demandee (capture)
+
+Ajoute une capture d'ecran montrant l'application accessible via l'IP publique Azure, par exemple:
+
+- `http://<IP_PUBLIQUE_VM>/health`
+

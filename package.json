@@ -1,0 +1,22 @@
+{
+  "name": "projet_deploiement_3",
+  "version": "1.0.0",
+  "description": "API de demonstration pour CI/CD GitHub Actions + Docker + Azure VM",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "jest --selectProjects unit",
+    "test:e2e": "jest --selectProjects e2e"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.1.0"
+  }
+}
