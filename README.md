@@ -18,46 +18,100 @@ Reponses attendues:
 - `GET /health` -> `200` + JSON `{ status: "ok", ... }`
 - `GET /api/greet?name=Jess` -> `200` + JSON `{ message: "Bonjour Jess" }`
 
-## Lancement local
+## Démarrage du projet
+
+### 1) Localement (développement)
+
+**Prérequis:** Node.js 20+ installé
 
 ```bash
+# Cloner le repo
+git clone https://github.com/jessicajnx/projet_deploiement_3.git
+cd projet_deploiement_3
+
+# Installer les dépendances
 npm ci
+
+# Lancer l'app
 npm start
 ```
 
-Verification:
+L'app est accessible localement sur `http://localhost:3000`.
+
+Vérification:
 
 ```bash
 curl http://localhost:3000/health
 curl "http://localhost:3000/api/greet?name=Jess"
 ```
 
-## Tests
+### 2) Tests localement
 
-Commandes CI (une commande par type):
+```bash
+# Tests unitaires uniquement
+npm run test:unit
 
-- Unit tests: `npm run test:unit`
-- E2E tests: `npm run test:e2e`
+# Tests E2E uniquement
+npm run test:e2e
 
-Les tests E2E verifient:
+# Tous les tests
+npm test
+```
 
-- disponibilite de l'application (`/health`)
-- fonctionnalite supplementaire (`/api/greet`)
+### 3) Docker localement
 
-## Docker
-
-Build et run local:
+Build l'image:
 
 ```bash
 docker build -t projet_deploiement_3:local .
+```
+
+Lancer l'app en conteneur:
+
+```bash
 docker run --rm -p 3000:3000 projet_deploiement_3:local
 ```
 
-Le `Dockerfile`:
+Puis accéder à `http://localhost:3000/health`.
 
-- utilise `node:20-alpine`
-- expose le port `3000`
-- lance l'app avec `npm start`
+### 4) Déploiement automatique sur Azure VM
+
+**Tu ne fais RIEN manuellement à partir d'ici.**
+
+Flux automatique:
+
+1. Tu pushes sur `main`:
+   ```bash
+   git add .
+   git commit -m "Mon changement"
+   git push origin main
+   ```
+
+2. GitHub Actions se déclenche automatiquement:
+   - Job 1: Tests unitaires
+   - Job 2: Tests E2E
+   - Job 3: Build image Docker + push Docker Hub
+   - Job 4: Deploy sur VM Azure via SSH + vérification
+
+3. L'app est accessible via l'IP publique Azure:
+   ```
+   http://4.180.228.24/health
+   http://4.180.228.24/api/greet?name=Jess
+   ```
+
+### 5) État actuel (déploiement en direct)
+
+L'application est **actuellement déployée et fonctionnelle** sur Azure VM:
+
+- **URL publique:** http://4.180.228.24
+- **Health endpoint:** http://4.180.228.24/health
+- **API endpoint:** http://4.180.228.24/api/greet?name=Jess
+- **Port:** 80 (public) -> 3000 (conteneur)
+- **Conteneur:** myapp (redémarrage automatique si crash)
+
+Chaque push vers `main` redéploie automatiquement l'app sur cette VM.
+
+
 
 ## Pipeline GitHub Actions
 
