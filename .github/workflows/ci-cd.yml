@@ -129,14 +129,37 @@ jobs:
             if ! docker info >/dev/null 2>&1; then
               DOCKER_CMD="sudo docker"
             fi
-            echo "${{ secrets.DOCKERHUB_TOKEN }}" | $DOCKER_CMD login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-            $DOCKER_CMD pull "${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+            IMAGE_REF="${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+            PULL_OK="false"
+            for i in $(seq 1 5); do
+              if $DOCKER_CMD pull "$IMAGE_REF"; then
+                PULL_OK="true"
+                break
+              fi
+              echo "Pull SHA attempt $i failed, retrying in 5s..."
+              sleep 5
+            done
+            if [ "$PULL_OK" != "true" ]; then
+              IMAGE_REF="${{ env.IMAGE_NAME }}:latest"
+              for i in $(seq 1 5); do
+                if $DOCKER_CMD pull "$IMAGE_REF"; then
+                  PULL_OK="true"
+                  break
+                fi
+                echo "Pull latest attempt $i failed, retrying in 5s..."
+                sleep 5
+              done
+            fi
+            if [ "$PULL_OK" != "true" ]; then
+              echo "Failed to pull image from Docker Hub"
+              exit 1
+            fi
             $DOCKER_CMD rm -f "${{ env.CONTAINER_NAME }}" || true
             $DOCKER_CMD run -d \
               --name "${{ env.CONTAINER_NAME }}" \
               --restart unless-stopped \
               -p "${{ secrets.HOST_PORT }}:${{ secrets.CONTAINER_PORT }}" \
-              "${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+              "$IMAGE_REF"
             LOCAL_OK="false"
             for i in $(seq 1 10); do
               if command -v curl >/dev/null 2>&1 && curl -fsS "http://localhost:${{ secrets.HOST_PORT }}/health" >/dev/null; then
