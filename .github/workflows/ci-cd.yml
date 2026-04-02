@@ -88,98 +88,112 @@ jobs:
     needs: docker-build-push
     runs-on: ubuntu-latest
     steps:
+      - name: Prepare SSH key
+        shell: bash
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          # Supports both true multiline keys and single-line keys containing \n escapes.
+          printf "%b" "${{ secrets.AZURE_VM_SSH_KEY }}" > ~/.ssh/azure_vm_key
+          chmod 600 ~/.ssh/azure_vm_key
+          ssh-keygen -y -f ~/.ssh/azure_vm_key >/dev/null
+
       - name: Deploy with SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.AZURE_VM_HOST }}
-          username: ${{ secrets.AZURE_VM_USER }}
-          key: ${{ secrets.AZURE_VM_SSH_KEY }}
-          script_stop: true
-          script: |
-            set -e
-            SUDO=""
-            if [ "$(id -u)" -ne 0 ]; then
-              SUDO="sudo"
-            fi
+        shell: bash
+        run: |
+          set -e
+          ssh -i ~/.ssh/azure_vm_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${{ secrets.AZURE_VM_USER }}@${{ secrets.AZURE_VM_HOST }}" << 'EOF'
+          set -e
+          SUDO=""
+          if [ "$(id -u)" -ne 0 ]; then
+            SUDO="sudo"
+          fi
 
-            if ! command -v docker >/dev/null 2>&1; then
-              if command -v apt-get >/dev/null 2>&1; then
-                $SUDO apt-get update -y
-                $SUDO apt-get install -y docker.io
-              elif command -v yum >/dev/null 2>&1; then
-                $SUDO yum install -y docker
-              else
-                echo "No supported package manager found to install Docker"
-                exit 1
-              fi
+          if ! command -v docker >/dev/null 2>&1; then
+            if command -v apt-get >/dev/null 2>&1; then
+              $SUDO apt-get update -y
+              $SUDO apt-get install -y docker.io
+            elif command -v yum >/dev/null 2>&1; then
+              $SUDO yum install -y docker
+            else
+              echo "No supported package manager found to install Docker"
+              exit 1
             fi
+          fi
 
-            $SUDO systemctl enable docker || true
-            $SUDO systemctl start docker || true
+          $SUDO systemctl enable docker || true
+          $SUDO systemctl start docker || true
 
-            if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
-              if command -v apt-get >/dev/null 2>&1; then
-                $SUDO apt-get install -y curl
-              elif command -v yum >/dev/null 2>&1; then
-                $SUDO yum install -y curl
-              fi
+          if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+            if command -v apt-get >/dev/null 2>&1; then
+              $SUDO apt-get install -y curl
+            elif command -v yum >/dev/null 2>&1; then
+              $SUDO yum install -y curl
             fi
+          fi
 
-            DOCKER_CMD="docker"
-            if ! docker info >/dev/null 2>&1; then
-              DOCKER_CMD="sudo docker"
+          DOCKER_CMD="docker"
+          if ! docker info >/dev/null 2>&1; then
+            DOCKER_CMD="sudo docker"
+          fi
+
+          IMAGE_REF="${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+          PULL_OK="false"
+          for i in $(seq 1 5); do
+            if $DOCKER_CMD pull "$IMAGE_REF"; then
+              PULL_OK="true"
+              break
             fi
-            IMAGE_REF="${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
-            PULL_OK="false"
+            echo "Pull SHA attempt $i failed, retrying in 5s..."
+            sleep 5
+          done
+
+          if [ "$PULL_OK" != "true" ]; then
+            IMAGE_REF="${{ env.IMAGE_NAME }}:latest"
             for i in $(seq 1 5); do
               if $DOCKER_CMD pull "$IMAGE_REF"; then
                 PULL_OK="true"
                 break
               fi
-              echo "Pull SHA attempt $i failed, retrying in 5s..."
+              echo "Pull latest attempt $i failed, retrying in 5s..."
               sleep 5
             done
-            if [ "$PULL_OK" != "true" ]; then
-              IMAGE_REF="${{ env.IMAGE_NAME }}:latest"
-              for i in $(seq 1 5); do
-                if $DOCKER_CMD pull "$IMAGE_REF"; then
-                  PULL_OK="true"
-                  break
-                fi
-                echo "Pull latest attempt $i failed, retrying in 5s..."
-                sleep 5
-              done
+          fi
+
+          if [ "$PULL_OK" != "true" ]; then
+            echo "Failed to pull image from Docker Hub"
+            exit 1
+          fi
+
+          $DOCKER_CMD rm -f "${{ env.CONTAINER_NAME }}" || true
+          $DOCKER_CMD run -d \
+            --name "${{ env.CONTAINER_NAME }}" \
+            --restart unless-stopped \
+            -p "${{ secrets.HOST_PORT }}:${{ secrets.CONTAINER_PORT }}" \
+            "$IMAGE_REF"
+
+          LOCAL_OK="false"
+          for i in $(seq 1 10); do
+            if command -v curl >/dev/null 2>&1 && curl -fsS "http://localhost:${{ secrets.HOST_PORT }}/health" >/dev/null; then
+              echo "VM local healthcheck passed"
+              LOCAL_OK="true"
+              break
             fi
-            if [ "$PULL_OK" != "true" ]; then
-              echo "Failed to pull image from Docker Hub"
-              exit 1
+            if command -v wget >/dev/null 2>&1 && wget -qO- "http://localhost:${{ secrets.HOST_PORT }}/health" >/dev/null; then
+              echo "VM local healthcheck passed"
+              LOCAL_OK="true"
+              break
             fi
-            $DOCKER_CMD rm -f "${{ env.CONTAINER_NAME }}" || true
-            $DOCKER_CMD run -d \
-              --name "${{ env.CONTAINER_NAME }}" \
-              --restart unless-stopped \
-              -p "${{ secrets.HOST_PORT }}:${{ secrets.CONTAINER_PORT }}" \
-              "$IMAGE_REF"
-            LOCAL_OK="false"
-            for i in $(seq 1 10); do
-              if command -v curl >/dev/null 2>&1 && curl -fsS "http://localhost:${{ secrets.HOST_PORT }}/health" >/dev/null; then
-                echo "VM local healthcheck passed"
-                LOCAL_OK="true"
-                break
-              fi
-              if command -v wget >/dev/null 2>&1 && wget -qO- "http://localhost:${{ secrets.HOST_PORT }}/health" >/dev/null; then
-                echo "VM local healthcheck passed"
-                LOCAL_OK="true"
-                break
-              fi
-              echo "VM healthcheck attempt $i failed, retrying in 5s..."
-              sleep 5
-            done
-            if [ "$LOCAL_OK" != "true" ]; then
-              echo "Warning: VM local healthcheck did not pass yet, continuing to public verification step"
-              $DOCKER_CMD ps || true
-              $DOCKER_CMD logs --tail 120 "${{ env.CONTAINER_NAME }}" || true
-            fi
+            echo "VM healthcheck attempt $i failed, retrying in 5s..."
+            sleep 5
+          done
+
+          if [ "$LOCAL_OK" != "true" ]; then
+            echo "Warning: VM local healthcheck did not pass yet, continuing to public verification step"
+            $DOCKER_CMD ps || true
+            $DOCKER_CMD logs --tail 120 "${{ env.CONTAINER_NAME }}" || true
+          fi
+          EOF
 
       - name: Verify public endpoint from GitHub runner
         run: |
