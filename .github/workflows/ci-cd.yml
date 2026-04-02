@@ -90,20 +90,20 @@ jobs:
     steps:
       - name: Prepare SSH key
         shell: bash
+        env:
+          AZURE_VM_SSH_KEY: ${{ secrets.AZURE_VM_SSH_KEY }}
+          AZURE_VM_SSH_KEY_B64: ${{ secrets.AZURE_VM_SSH_KEY_B64 }}
         run: |
-          set -e
+          set -euo pipefail
           mkdir -p ~/.ssh
-          RAW_KEY='${{ secrets.AZURE_VM_SSH_KEY }}'
 
-          # Attempt 1: regular multiline / escaped newline key.
-          printf "%b" "$RAW_KEY" | tr -d '\r' > ~/.ssh/azure_vm_key
-
-          # Remove accidental surrounding quotes if present.
-          sed -i '1s/^"//; $s/"$//' ~/.ssh/azure_vm_key
-
-          # Attempt 2: secret provided as base64-encoded key.
-          if ! ssh-keygen -y -f ~/.ssh/azure_vm_key >/dev/null 2>&1; then
-            echo "$RAW_KEY" | tr -d '\r' | base64 -d > ~/.ssh/azure_vm_key 2>/dev/null || true
+          # Preferred: use base64 to preserve exact file bytes and avoid newline/CRLF issues.
+          if [ -n "${AZURE_VM_SSH_KEY_B64}" ]; then
+            printf '%s' "$AZURE_VM_SSH_KEY_B64" | tr -d '\r\n ' | base64 -d > ~/.ssh/azure_vm_key
+          else
+            # Fallback: regular multiline / escaped newline key.
+            printf "%b" "$AZURE_VM_SSH_KEY" | tr -d '\r' > ~/.ssh/azure_vm_key
+            sed -i '1s/^"//; $s/"$//' ~/.ssh/azure_vm_key
           fi
 
           chmod 600 ~/.ssh/azure_vm_key
