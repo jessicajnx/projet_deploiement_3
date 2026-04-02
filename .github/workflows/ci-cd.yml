@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKER_IMAGE_NAME }}
   IMAGE_TAG: ${{ github.sha }}
   CONTAINER_NAME: myapp
@@ -21,7 +22,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
@@ -41,7 +42,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
@@ -136,20 +137,26 @@ jobs:
               --restart unless-stopped \
               -p "${{ secrets.HOST_PORT }}:${{ secrets.CONTAINER_PORT }}" \
               "${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+            LOCAL_OK="false"
             for i in $(seq 1 10); do
               if command -v curl >/dev/null 2>&1 && curl -fsS "http://localhost:${{ secrets.HOST_PORT }}/health" >/dev/null; then
                 echo "VM local healthcheck passed"
-                exit 0
+                LOCAL_OK="true"
+                break
               fi
               if command -v wget >/dev/null 2>&1 && wget -qO- "http://localhost:${{ secrets.HOST_PORT }}/health" >/dev/null; then
                 echo "VM local healthcheck passed"
-                exit 0
+                LOCAL_OK="true"
+                break
               fi
               echo "VM healthcheck attempt $i failed, retrying in 5s..."
               sleep 5
             done
-            echo "VM local healthcheck failed"
-            exit 1
+            if [ "$LOCAL_OK" != "true" ]; then
+              echo "Warning: VM local healthcheck did not pass yet, continuing to public verification step"
+              $DOCKER_CMD ps || true
+              $DOCKER_CMD logs --tail 120 "${{ env.CONTAINER_NAME }}" || true
+            fi
 
       - name: Verify public endpoint from GitHub runner
         run: |
