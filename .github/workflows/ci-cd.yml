@@ -93,8 +93,19 @@ jobs:
         run: |
           set -e
           mkdir -p ~/.ssh
-          # Supports both true multiline keys and single-line keys containing \n escapes.
-          printf "%b" "${{ secrets.AZURE_VM_SSH_KEY }}" > ~/.ssh/azure_vm_key
+          RAW_KEY='${{ secrets.AZURE_VM_SSH_KEY }}'
+
+          # Attempt 1: regular multiline / escaped newline key.
+          printf "%b" "$RAW_KEY" | tr -d '\r' > ~/.ssh/azure_vm_key
+
+          # Remove accidental surrounding quotes if present.
+          sed -i '1s/^"//; $s/"$//' ~/.ssh/azure_vm_key
+
+          # Attempt 2: secret provided as base64-encoded key.
+          if ! ssh-keygen -y -f ~/.ssh/azure_vm_key >/dev/null 2>&1; then
+            echo "$RAW_KEY" | tr -d '\r' | base64 -d > ~/.ssh/azure_vm_key 2>/dev/null || true
+          fi
+
           chmod 600 ~/.ssh/azure_vm_key
           ssh-keygen -y -f ~/.ssh/azure_vm_key >/dev/null
 
